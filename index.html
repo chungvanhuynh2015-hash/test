@@ -1,1 +1,379 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Đua Vịt Siêu Tốc - Duck Racing</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #111;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            max-width: 1200px;
+            max-height: 700px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+        }
+        canvas {
+            background: #2b7a0b;
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            color: white;
+            text-align: center;
+            padding: 20px;
+            backdrop-filter: blur(5px);
+        }
+        .overlay h1 {
+            font-size: 52px;
+            margin: 0 0 10px 0;
+            color: #ffcc00;
+            text-shadow: 3px 3px 0px #ff3333, 5px 5px 15px rgba(0,0,0,0.7);
+        }
+        .overlay p {
+            font-size: 20px;
+            margin: 0 0 25px 0;
+            color: #ddd;
+        }
+        .duck-choices {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .duck-card {
+            background: rgba(255, 255, 255, 0.1);
+            border: 3px solid transparent;
+            border-radius: 15px;
+            padding: 15px;
+            cursor: pointer;
+            transition: 0.2s;
+            width: 110px;
+            text-align: center;
+        }
+        .duck-card:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-5px);
+        }
+        .duck-card.selected {
+            border-color: #ffcc00;
+            background: rgba(255, 204, 0, 0.2);
+        }
+        .duck-color-box {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            margin: 0 auto 10px auto;
+            border: 2px solid #fff;
+        }
+        .btn {
+            padding: 15px 40px;
+            font-size: 20px;
+            font-weight: bold;
+            background: linear-gradient(to bottom, #ffcc00, #ff9900);
+            color: #222;
+            border: 2px solid #cc7a00;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #b36b00, 0 10px 20px rgba(0,0,0,0.4);
+            transition: 0.1s;
+        }
+        .btn:hover {
+            background: linear-gradient(to bottom, #ffdb4d, #ffaa00);
+        }
+        .btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #b36b00, 0 5px 10px rgba(0,0,0,0.4);
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
 
+    <div id="gameContainer">
+        <!-- Màn hình chọn vịt và đặt cược -->
+        <div id="startScreen" class="overlay">
+            <h1>ĐUA VỊT SIÊU TỐC</h1>
+            <p>Chọn chú vịt yêu thích của bạn để bắt đầu cuộc đua!</p>
+            
+            <div class="duck-choices" id="duckChoices">
+                <div class="duck-card selected" onclick="selectDuck(0)">
+                    <div class="duck-color-box" style="background: #ff3333;"></div>
+                    <strong>Vịt Đỏ</strong>
+                </div>
+                <div class="duck-card" onclick="selectDuck(1)">
+                    <div class="duck-color-box" style="background: #3388ff;"></div>
+                    <strong>Vịt Xanh</strong>
+                </div>
+                <div class="duck-card" onclick="selectDuck(2)">
+                    <div class="duck-color-box" style="background: #ffcc00;"></div>
+                    <strong>Vịt Vàng</strong>
+                </div>
+                <div class="duck-card" onclick="selectDuck(3)">
+                    <div class="duck-color-box" style="background: #aa33ff;"></div>
+                    <strong>Vịt Tím</strong>
+                </div>
+            </div>
+
+            <button class="btn" onclick="startRace()">XUẤT PHÁT!</button>
+        </div>
+
+        <!-- Màn hình kết quả -->
+        <div id="gameOverScreen" class="overlay hidden">
+            <h1 id="resultTitle">KẾT QUẢ ĐUA</h1>
+            <p id="resultText">Chú vịt về đích đầu tiên!</p>
+            <button class="btn" onclick="resetToMenu()">CHƠI LẠI</button>
+        </div>
+
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+const startScreen = document.getElementById("startScreen");
+const gameOverScreen = document.getElementById("gameOverScreen");
+const resultTitle = document.getElementById("resultTitle");
+const resultText = document.getElementById("resultText");
+
+let gameState = "MENU"; // MENU, RACING, GAMEOVER
+let selectedDuckIndex = 0;
+let cameraX = 0;
+let finishLineX = 4000; // Chiều dài đường đua
+
+let ducks = [
+    { name: "Vịt Đỏ", color: "#ff3333", x: 100, y: 0, speed: 0, maxSpeed: 7, baseSpeed: 5, progress: 0 },
+    { name: "Vịt Xanh Biển", color: "#3388ff", x: 100, y: 0, speed: 0, maxSpeed: 7.2, baseSpeed: 4.8, progress: 0 },
+    { name: "Vịt Vàng", color: "#ffcc00", x: 100, y: 0, speed: 0, maxSpeed: 6.8, baseSpeed: 5.2, progress: 0 },
+    { name: "Vịt Tím", color: "#aa33ff", x: 100, y: 0, speed: 0, maxSpeed: 7.1, baseSpeed: 4.9, progress: 0 }
+];
+
+let particles = [];
+
+function selectDuck(index) {
+    selectedDuckIndex = index;
+    const cards = document.querySelectorAll(".duck-card");
+    cards.forEach((card, i) => {
+        if (i === index) card.classList.add("selected");
+        else card.classList.remove("selected");
+    });
+}
+
+function resizeCanvas() {
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight;
+}
+
+function startRace() {
+    gameState = "RACING";
+    startScreen.classList.add("hidden");
+    gameOverScreen.classList.add("hidden");
+    cameraX = 0;
+
+    // Phân bổ vị trí làn đường cho từng con vịt
+    let laneHeight = (canvas.height - 150) / ducks.length;
+    ducks.forEach((duck, index) => {
+        duck.x = 100;
+        duck.y = 100 + index * laneHeight + laneHeight / 2;
+        duck.speed = duck.baseSpeed;
+        duck.progress = 0;
+    });
+}
+
+function endGame(winner) {
+    gameState = "GAMEOVER";
+    gameOverScreen.classList.remove("hidden");
+    
+    if (winner === selectedDuckIndex) {
+        resultTitle.textContent = "CHIẾN THẮNG RỰC RỠ!";
+        resultTitle.style.color = "#ffcc00";
+        resultText.innerHTML = `Chúc mừng! Chú <b>${ducks.winner}</b> bạn chọn đã về nhất!`;
+    } else {
+        resultTitle.textContent = "THUA CUỘC RỒI!";
+        resultTitle.style.color = "#ff3333";
+        resultText.innerHTML = `Tiếc quá, chú <b>${ducks[winner].name}</b> đã về đích trước. Bạn đã chọn ${ducks[selectedDuckIndex].name}.`;
+    }
+}
+
+// Vẽ một chú vịt hoạt hình ngộ nghĩnh
+function drawDuck(x, y, color, isMoving) {
+    ctx.save();
+    ctx.translate(x, y);
+
+    // Hiệu ứng nhún nhảy khi di chuyển
+    let bounce = isMoving ? Math.sin(Date.now() / 80) * 4 : 0;
+    ctx.translate(0, bounce);
+
+    // Thân vịt
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(0, 10, 26, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#111";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Đầu vịt
+    ctx.beginPath();
+    ctx.arc(15, -8, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Mắt vịt
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(20, -12, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#000";
+    ctx.beginPath();
+    ctx.arc(22, -12, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Mỏ vịt
+    ctx.fillStyle = "#ff7700";
+    ctx.beginPath();
+    ctx.moveTo(28, -8);
+    ctx.lineTo(40, -5);
+    ctx.lineTo(28, -2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Cánh vịt
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(-4, 12, 10, 6, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+function update() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 1. Vẽ nền đường đua (Màu sân cỏ và các làn đường)
+    ctx.fillStyle = "#34a853";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    let laneHeight = (canvas.height - 150) / ducks.length;
+
+    // Vẽ các vạch phân làn
+    for (let i = 0; i <= ducks.length; i++) {
+        let lineY = 100 + i * laneHeight;
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([15, 15]);
+        ctx.beginPath();
+        ctx.moveTo(0, lineY);
+        ctx.lineTo(canvas.width, lineY);
+        ctx.stroke();
+        ctx.setLineDash([]); // Reset line dash
+    }
+
+    // Vẽ vạch xuất phát
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(150 - cameraX, 100, 10, canvas.height - 150);
+    ctx.fillStyle = "#000";
+    ctx.font = "bold 16px Arial";
+    ctx.fillText("START", 130 - cameraX, 85);
+
+    // Vẽ vạch đích cuối đường đua
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(finishLineX - cameraX, 100, 20, canvas.height - 150);
+    for(let j = 0; j < canvas.height - 150; j += 30) {
+        ctx.fillStyle = (j/30)%2 === 0 ? "#000" : "#fff";
+        ctx.fillRect(finishLineX - cameraX, 100 + j, 20, 15);
+    }
+    ctx.fillStyle = "#ffcc00";
+    ctx.font = "bold 22px Arial";
+    ctx.fillText("FINISH", finishLineX - cameraX - 15, 80);
+
+    if (gameState === "RACING") {
+        let leaderX = 0;
+
+        ducks.forEach((duck, index) => {
+            // Tốc độ thay đổi ngẫu nhiên tạo cảm giác kịch tính bứt tốc
+            let randomAcc = (Math.random() - 0.48) * 0.3;
+            duck.speed += randomAcc;
+            if (duck.speed < 2) duck.speed = 2;
+            if (duck.speed > duck.maxSpeed) duck.speed = duck.maxSpeed;
+
+            duck.x += duck.speed;
+
+            // Tìm vị trí con dẫn đầu để dịch chuyển camera theo
+            if (duck.x > leaderX) {
+                leaderX = duck.x;
+            }
+
+            // Vẽ vịt
+            drawDuck(duck.x - cameraX, duck.y, duck.color, true);
+
+            // Kiểm tra về đích
+            if (duck.x >= finishLineX) {
+                endGame(index);
+            }
+        });
+
+        // Camera bám theo vịt dẫn đầu (giữ cách lề trái màn hình một khoảng)
+        let targetCameraX = leaderX - canvas.width * 0.3;
+        if (targetCameraX < 0) targetCameraX = 0;
+        cameraX += (targetCameraX - cameraX) * 0.1; // Chuyển động mượt camera
+
+        // Hiển thị bảng thông tin trực tiếp trên màn hình đua
+        ctx.fillStyle = "rgba(0,0,0,0.5)";
+        ctx.fillRect(20, 20, 250, 45);
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 16px Arial";
+        ctx.fillText(`Đang chọn: ${ducks[selectedDuckIndex].name}`, 35, 48);
+    } else if (gameState === "MENU") {
+        // Vẽ tĩnh các con vịt ở menu chính
+        ducks.forEach((duck, index) => {
+            let startY = 130 + index * laneHeight + laneHeight / 2;
+            drawDuck(180, startY, duck.color, false);
+        });
+    }
+
+    requestAnimationFrame(update);
+}
+
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+update();
+</script>
+</body>
+</html>
